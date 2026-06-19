@@ -1,0 +1,68 @@
+# ============================================================
+# Spider dataset — large files, NOT versioned in git.
+# Download separately (see README) and unzip into Source/.
+# ============================================================
+Source/spider_data/
+Source/spider_data.zip
+
+# Safety net for stray database/data files anywhere in the repo
+*.sqlite
+*.sqlite3
+*.db
+
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg
+*.egg-info/
+sdist/
+wheels/
+var/
+
+# ============================================================
+# Virtual environments
+# ============================================================
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# ============================================================
+# Jupyter
+# ============================================================
+.ipynb_checkpoints/
+
+# ============================================================
+# ML / RL experiment artifacts
+# ============================================================
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.safetensors
+checkpoints/
+outputs/
+runs/
+logs/
+*.log
+wandb/
+
+# ============================================================
+# OS / editor cruft
+# ============================================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swpg
