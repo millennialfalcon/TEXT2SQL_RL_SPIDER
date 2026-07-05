@@ -4,7 +4,7 @@ import pandas as pd
 from pathlib import Path
 from dataclasses import dataclass 
 from contextlib import closing
-
+from collections import Counter
 
 @dataclass
 class SpiderSample: 
@@ -12,6 +12,12 @@ class SpiderSample:
     gold_query:str 
     db_id:str
     db_path:Path 
+
+@dataclass
+class QueryResult: 
+    ok: bool
+    rows: list[tuple]
+    error: str | None = None
 
 def load_spider_samples(spider_root:str = 'Source/spider_data', split = 'train') -> list[SpiderSample]:
     spider_root = Path(spider_root)
@@ -92,29 +98,79 @@ def create_prompt(sample) -> str:
     
     db_prompt_info = "\n".join(packages)
     prompt = f"""
-You are writing SQLite SQL for a text-to-SQL task.
+    You are writing SQLite SQL for a text-to-SQL task.
 
-Given the database schema and a natural language question, write one SQL query that answers the question.
+    Given the database schema and a natural language question, write one SQL query that answers the question.
 
-Rules:
-- Return only the SQL query.
-- Use SQLite syntax.
-- Do not include explanations.
-- Do not modify the database.
-- Use only the tables and columns listed in the schema.
+    Rules:
+    - Return only the SQL query.
+    - Use SQLite syntax.
+    - Do not include explanations.
+    - Do not modify the database.
+    - Use only the tables and columns listed in the schema.
 
-Database schema:
-{db_prompt_info}
+    Database schema:
+    {db_prompt_info}
 
-Question:
-{sample.question}
+    Question:
+    {sample.question}
 
-SQL:
-"""
+    SQL:
+    """
     
     return prompt
 
+def execute_query(db_path:Path, query:str) -> QueryResult: 
+    try: 
+        with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn: 
+            rows = conn.execute(query).fetchall()
+        return QueryResult(ok=True, rows=rows)
+    except Exception as e: 
+        return QueryResult(ok=False, rows=[], error=str(e))
+
+def does_order_matters(sql:str) -> bool:
+    return 'order by' in sql.lower()
+
+def normalize_value(value): 
+    return value
+
+def normalize_row(row:tuple): 
+    return tuple(normalize_value(value) for value in row)
+
+def rows_matched(gold_rows:list[tuple], candidate_rows:list[tuple], order_matters: bool) -> bool: 
+    gold_rows = [normalize_row(row) for row in gold_rows]
+    candidate_rows = [normalize_row(row) for row in candidate_rows]
+
+    if order_matters: 
+        return gold_rows == candidate_rows 
+    
+    return Counter(gold_rows) == Counter(candidate_rows)
+
+def candidate_scorer(sample:SpiderSample, candidate_sql:str) -> float: 
+    db_path = sample.db_path 
+    gold_result = execute_query(db_path, sample.gold_query) 
+    candidate_result = execute_query(db_path, candidate_sql)
+
+    order_matters = does_order_matters(sample.gold_query)
+
+    if not gold_result.ok: 
+        raise ValueError("Gold query failed. ")
+    
+    if not candidate_result.ok: 
+        return 0.0 
+
+    if rows_matched(gold_result.rows, candidate_result.rows, order_matters): 
+        return 1.0 
+
+    return 0.2
+
 if __name__ == "__main__": 
-    samples = load_spider_samples()
-    prompt = create_prompt(samples[0])
-    print(prompt)
+    def gen_sql(): 
+        return "select 1"
+    samples = load_spider_samples()[:20]
+    for sample in samples: 
+        assert candidate_scorer(sample, sample.gold_query) == 1 
+        f"{sample.db_id}, {sample.gold_query}, {candidate_scorer(sample, sample.gold_query)}"
+        assert candidate_scorer(sample, "not sql") == 0
+        assert candidate_scorer(sample, gen_sql()) == 0.2
+    print('all passed')
