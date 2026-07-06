@@ -6,6 +6,7 @@ from contextlib import closing
 from dataclasses import dataclass 
 from openai import OpenAI
 from pathlib import Path
+from textwrap import dedent
 
 #Custom Classes
 @dataclass
@@ -100,7 +101,7 @@ def create_prompt(sample) -> str:
         packages.append(package)
     
     db_prompt_info = "\n".join(packages)
-    prompt = f"""
+    prompt = dedent(f"""
     You are writing SQLite SQL for a text-to-SQL task.
 
     Given the database schema and a natural language question, write one SQL query that answers the question.
@@ -119,7 +120,7 @@ def create_prompt(sample) -> str:
     {sample.question}
 
     SQL:
-    """
+    """).strip()
     
     return prompt
 
@@ -171,12 +172,15 @@ def extract_sql(query:str) -> str:
     query = query.strip()
     if query.startswith("```"): 
         lines = query.splitlines()
-        lines = [line for line in lines if not line.strip.startswith("```")]
-        return "\n".join(lines)
+        lines = [line for line in lines if not line.strip().startswith("```")]
+        return "\n".join(lines).strip()
     else: 
         return query
 
-def _local_call_oai(sample:SpiderSample, client=OpenAI(), model:str = 'gpt-5.4-mini', n:int = 8): 
+def _local_call_oai(sample:SpiderSample, client:OpenAI | None = None, model:str = 'gpt-5.4-mini', n:int = 8): 
+    if client is None:
+        client = OpenAI()
+
     responses = []
     for _ in range(n): 
         response = client.responses.create(
@@ -184,7 +188,7 @@ def _local_call_oai(sample:SpiderSample, client=OpenAI(), model:str = 'gpt-5.4-m
             input = create_prompt(sample),
             temperature = 0.2
         ).output[0].content[0].text
-        responses.append(response)
+        responses.append(extract_sql(response))
     
     return responses
 
@@ -197,4 +201,3 @@ if __name__ == "__main__":
         print(f"OAI Query:  {oai_query}")
         print(f"Score: {candidate_scorer(sample, oai_query)}")
         print("------------------\n")
-
