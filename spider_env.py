@@ -150,7 +150,7 @@ def rows_matched(gold_rows:list[tuple], candidate_rows:list[tuple], order_matter
     
     return Counter(gold_rows) == Counter(candidate_rows)
 
-def candidate_scorer(sample:SpiderSample, candidate_sql:str) -> float: 
+def score_sql_candidateate(sample:SpiderSample, candidate_sql:str) -> float: 
     db_path = sample.db_path 
     gold_result = execute_query(db_path, sample.gold_query) 
     candidate_result = execute_query(db_path, candidate_sql)
@@ -192,12 +192,51 @@ def _local_call_oai(sample:SpiderSample, client:OpenAI | None = None, model:str 
     
     return responses
 
+def create_rollout_group(sample:SpiderSample, candidate_sqls: list[str]):
+    group = {
+        "db_id" : sample.db_id, 
+        "question" : sample.question, 
+        "gold_query" : sample.gold_query, 
+        "prompt": create_prompt(sample),
+        "candidates" : []
+    }
+
+    for candidate_sql in candidate_sqls: 
+        candidate_sql = extract_sql(candidate_sql)
+        group["candidates"].append({
+            "candidate_sql" : candidate_sql, 
+            "reward" : score_sql_candidate(sample, candidate_sql)
+        })
+
+    return group
+
+def summarize_rollout_groups(groups:list[dict]) -> dict: 
+    rewards = [candidate['reward'] for group in groups for candidate in group["candidates"]]
+    
+    if not rewards:
+        return {
+            "num_groups" : len(groups), 
+            "num_candidates" : 0, 
+            "mean_reward" : 0, 
+            "num_exact" : 0, 
+            "num_wrong" : 0,
+            "num_failed" : 0
+        }
+    else: 
+        return {
+            "num_groups" : len(groups), 
+            "num_candidates" : len(rewards), 
+            "mean_reward" : sum(rewards) / len(rewards), 
+            "num_exact" : sum(r == 1 for r in rewards),
+            "num_wrong" : sum(r == 0.2 for r in rewards), 
+            "num_failed" : sum(r == 0 for r in rewards)
+        }
+
 if __name__ == "__main__": 
-    samples = load_spider_samples()[:5]
+    samples = load_spider_samples()[:2]
+    groups = []
     for sample in samples: 
-        oai_query = _local_call_oai(sample, n=1)[0]
-        print(f"DB ID: {sample.db_id}")
-        print(f"Gold Query:  {sample.gold_query}")
-        print(f"OAI Query:  {oai_query}")
-        print(f"Score: {candidate_scorer(sample, oai_query)}")
-        print("------------------\n")
+        oai_query = _local_call_oai(sample, n=5)
+        groups.append(create_rollout_group(sample, oai_query))
+    
+    print(summarize_rollout_groups(groups))
