@@ -71,3 +71,5 @@ Thumbs.db
 # Files to be kept secret 
 # ============================================================
 wip.ipynb
+hidden.py
+hidden.txt

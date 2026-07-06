@@ -1,11 +1,13 @@
-import sqlite3
 import json
 import pandas as pd 
-from pathlib import Path
-from dataclasses import dataclass 
-from contextlib import closing
+import sqlite3
 from collections import Counter
+from contextlib import closing
+from dataclasses import dataclass 
+from openai import OpenAI
+from pathlib import Path
 
+#Custom Classes
 @dataclass
 class SpiderSample: 
     question: str
@@ -19,6 +21,7 @@ class QueryResult:
     rows: list[tuple]
     error: str | None = None
 
+#Helper Functions
 def load_spider_samples(spider_root:str = 'Source/spider_data', split = 'train') -> list[SpiderSample]:
     spider_root = Path(spider_root)
     if split == 'train': 
@@ -164,13 +167,34 @@ def candidate_scorer(sample:SpiderSample, candidate_sql:str) -> float:
 
     return 0.2
 
+def extract_sql(query:str) -> str:
+    query = query.strip()
+    if query.startswith("```"): 
+        lines = query.splitlines()
+        lines = [line for line in lines if not line.strip.startswith("```")]
+        return "\n".join(lines)
+    else: 
+        return query
+
+def _local_call_oai(sample:SpiderSample, client=OpenAI(), model:str = 'gpt-5.4-mini', n:int = 8): 
+    responses = []
+    for _ in range(n): 
+        response = client.responses.create(
+            model = model, 
+            input = create_prompt(sample),
+            temperature = 0.2
+        ).output[0].content[0].text
+        responses.append(response)
+    
+    return responses
+
 if __name__ == "__main__": 
-    def gen_sql(): 
-        return "select 1"
-    samples = load_spider_samples()[:20]
+    samples = load_spider_samples()[:5]
     for sample in samples: 
-        assert candidate_scorer(sample, sample.gold_query) == 1 
-        f"{sample.db_id}, {sample.gold_query}, {candidate_scorer(sample, sample.gold_query)}"
-        assert candidate_scorer(sample, "not sql") == 0
-        assert candidate_scorer(sample, gen_sql()) == 0.2
-    print('all passed')
+        oai_query = _local_call_oai(sample, n=1)[0]
+        print(f"DB ID: {sample.db_id}")
+        print(f"Gold Query:  {sample.gold_query}")
+        print(f"OAI Query:  {oai_query}")
+        print(f"Score: {candidate_scorer(sample, oai_query)}")
+        print("------------------\n")
+
