@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 import pandas as pd 
 import sqlite3
@@ -150,7 +151,7 @@ def rows_matched(gold_rows:list[tuple], candidate_rows:list[tuple], order_matter
     
     return Counter(gold_rows) == Counter(candidate_rows)
 
-def score_sql_candidateate(sample:SpiderSample, candidate_sql:str) -> float: 
+def score_sql_candidate(sample:SpiderSample, candidate_sql:str) -> float: 
     db_path = sample.db_path 
     gold_result = execute_query(db_path, sample.gold_query) 
     candidate_result = execute_query(db_path, candidate_sql)
@@ -177,7 +178,7 @@ def extract_sql(query:str) -> str:
     else: 
         return query
 
-def _local_call_oai(sample:SpiderSample, client:OpenAI | None = None, model:str = 'gpt-5.4-mini', n:int = 8): 
+def _local_call_oai(sample:SpiderSample, *, client:OpenAI | None = None, model:str = 'gpt-5.4-mini', n:int = 8): 
     if client is None:
         client = OpenAI()
 
