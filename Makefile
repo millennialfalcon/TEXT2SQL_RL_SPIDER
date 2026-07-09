@@ -13,7 +13,7 @@ download-data: $(SPIDER_ZIP)
 
 $(SPIDER_ZIP):
 	@mkdir -p Source
-	$(GDOWN) --id $(SPIDER_DRIVE_ID) -O $(SPIDER_ZIP)
+	$(GDOWN) $(SPIDER_DRIVE_ID) -O $(SPIDER_ZIP)
 
 unpack-data: $(SPIDER_DATA_DIR)
 

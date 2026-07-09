@@ -5,16 +5,11 @@
 This project expects the Spider dataset at `Source/spider_data`, which matches
 the default path in `spider_env.load_spider_samples()`.
 
-Install the downloader once on a new box:
+Install the project dependencies, then fetch and verify the dataset:
 
 ```sh
-uv pip install gdown
-```
-
-Then fetch and verify the dataset:
-
-```sh
-make data
+uv sync
+uv run make data
 ```
 
 The Makefile downloads the official Spider 1.0 `spider_data.zip`, unzips it into
