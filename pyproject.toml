@@ -15,3 +15,8 @@ dependencies = [
 required-environments = [
     "sys_platform == 'darwin' and platform_machine == 'x86_64'",
 ]
+
+[dependency-groups]
+dev = [
+    "gdown>=6.1.0",
+]

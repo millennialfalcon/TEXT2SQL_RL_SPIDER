@@ -1,6 +1,25 @@
 # TEXT2SQL_RL_SPIDER
 
+## Setup data
 
+This project expects the Spider dataset at `Source/spider_data`, which matches
+the default path in `spider_env.load_spider_samples()`.
+
+Install the downloader once on a new box:
+
+```sh
+uv pip install gdown
+```
+
+Then fetch and verify the dataset:
+
+```sh
+make data
+```
+
+The Makefile downloads the official Spider 1.0 `spider_data.zip`, unzips it into
+`Source/`, and checks for the train/dev JSON files plus the database directory.
+The data files are ignored by git.
 
 ### Sources 
 @inproceedings{Yu&al.18c,
