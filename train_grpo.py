@@ -7,7 +7,10 @@ from debug_output import JSONLWriter, build_logger
 
 def build_training_records(samples: list[env.SpiderSample]) -> list[dict]:
     return [
-        {"sample_id": i, "prompt": env.create_prompt(sample)}
+        {"sample_id": i,
+        "prompt": [{
+            "role" : "user",
+            "content": env.create_prompt(sample)}]}
         for i, sample in enumerate(samples)
     ]
 
@@ -52,6 +55,7 @@ def build_spider_reward_function(
         rewards = []
 
         for completion, sid in zip(completions, sample_ids):
+            completion = completion[-1]["content"]
             sample = sample_lookup[sid]
             extraction = env.extract_sql(completion)
             query = extraction["query"]
