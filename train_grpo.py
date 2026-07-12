@@ -1,7 +1,8 @@
 from __future__ import annotations
-
+import logging
 import spider_env as env
 from datasets import Dataset
+from debug_output import JSONLWriter, build_logger
 
 
 def build_training_records(samples:list[env.SpiderSample]) -> list[dict]:
@@ -9,7 +10,6 @@ def build_training_records(samples:list[env.SpiderSample]) -> list[dict]:
         {"sample_id" : i,
         "prompt" : env.create_prompt(sample)} for i, sample in enumerate(samples)
     ]
-
 
 def build_training_dataset(samples:list[env.SpiderSample]) -> Dataset:
     return Dataset.from_list(build_training_records(samples))
@@ -23,7 +23,7 @@ def reward_completions(completions:list[str], sample_ids:list[int], sample_looku
     return [env.score_sql_candidate(sample_lookup[sample_id], env.extract_sql(completion)) for completion, sample_id in zip(completions, sample_ids)]
 
 
-def build_spider_reward_function(sample_lookup:dict[int, env.SpiderSample]):
+def build_spider_reward_function(sample_lookup:dict[int, env.SpiderSample], logger:logging.Logger|None = None, *, json_debugger:JSONLWriter|None = None):
     def spider_reward_function(prompts:list[str], completions:list[str], sample_id:list[int], **kwargs) -> list[float]:
         sample_ids = sample_id
 
@@ -31,16 +31,47 @@ def build_spider_reward_function(sample_lookup:dict[int, env.SpiderSample]):
             raise ValueError("Different numbers of Completions and Sample IDs. ")
 
         rewards = []
+
         for completion, sid in zip(completions, sample_ids):
             sample = sample_lookup[sid]
             query = env.extract_sql(completion)
-            rewards.append(env.score_sql_candidate(sample, query))
+            result = env.execute_query(sample.db_path, query)
+            reward = env.score_sql_candidate(sample, query)
+            rewards.append(reward)
+
+            if not result.ok:
+                outcome = "execution_error"
+            elif reward == 1.0:
+                outcome = "exact_match"
+            else:
+                outcome = "wrong_result"
+
+            record = {
+                "sample_id": sid,
+                "db_id": sample.db_id,
+                "raw_completion": completion,
+                "extracted_sql": query,
+                "reward": reward,
+                "outcome": outcome,
+                "error": result.error,
+            }
+            if json_debugger:
+                json_debugger.write(record)
+            if logger:
+                logger.info(
+                    "sample_id=%s db_id=%s reward=%s outcome=%s error=%s",
+                    sid,
+                    sample.db_id,
+                    reward,
+                    outcome,
+                    result.error,
+                )
 
         return rewards
+
     return spider_reward_function
 
 if __name__ == "__main__":
-    import spider_env as env
     import argparse
     from trl import GRPOConfig, GRPOTrainer
 
@@ -92,5 +123,3 @@ if __name__ == "__main__":
         trainer.train()
     else:
         print("Trainer built. Pass --train to begin. ")
-
-    print(dataset)
