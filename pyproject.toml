@@ -10,6 +10,7 @@ dependencies = [
     "torch>=2.2.2",
     "transformers>=5.13.0",
     "trl>=1.7.1",
+    "wandb>=0.28.0",
 ]
 [tool.uv]
 required-environments = [
