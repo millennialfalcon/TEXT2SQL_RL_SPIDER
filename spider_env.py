@@ -202,7 +202,7 @@ def score_sql_candidate(
 
 def extract_sql(query: str) -> dict:
     query = query.strip()
-    pat = r"```(?:sql|sqlite)[ \t]*\r?\n(?P<query>.*?)\r?\n```"
+    pat = r"```(?:sql|sqlite)[ \t]*\r?\n(?P<query>.*?)\r?\n[ \t]*```"
     m = [x for x in re.finditer(pat, query, flags=re.IGNORECASE | re.DOTALL)]
 
     if len(m) == 0:
