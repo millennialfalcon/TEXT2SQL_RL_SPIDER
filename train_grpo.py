@@ -25,10 +25,14 @@ def reward_completions(
     sample_ids: list[int],
     sample_lookup: dict[int, env.SpiderSample],
 ) -> list[float]:
-    return [
-        env.score_sql_candidate(sample_lookup[sample_id], env.extract_sql(completion))
-        for completion, sample_id in zip(completions, sample_ids)
-    ]
+    rewards = []
+    for completion, sample_id in zip(completions, sample_ids):
+        extraction = env.extract_sql(completion)
+        reward = env.score_sql_candidate(
+            sample_lookup[sample_id], extraction["query"], extraction["has_extra_text"]
+        )
+        rewards.append(reward)
+    return rewards
 
 
 def build_spider_reward_function(
@@ -49,15 +53,21 @@ def build_spider_reward_function(
 
         for completion, sid in zip(completions, sample_ids):
             sample = sample_lookup[sid]
-            query = env.extract_sql(completion)
+            extraction = env.extract_sql(completion)
+            query = extraction["query"]
+            has_extra_text = extraction["has_extra_text"]
+            was_fenced = extraction["was_fenced"]
+
             result = env.execute_query(sample.db_path, query)
-            reward = env.score_sql_candidate(sample, query)
+            reward = env.score_sql_candidate(sample, query, has_extra_text)
             rewards.append(reward)
 
             if not result.ok:
                 outcome = "execution_error"
             elif reward == 1.0:
                 outcome = "exact_match"
+            elif reward == 0.4:
+                outcome = "correct_query_extra_text"
             else:
                 outcome = "wrong_result"
 
@@ -69,6 +79,8 @@ def build_spider_reward_function(
                 "reward": reward,
                 "outcome": outcome,
                 "error": result.error,
+                "was_fenced": was_fenced,
+                "has_extra_text": has_extra_text,
             }
             if json_debugger:
                 json_debugger.write(record)
