@@ -7,7 +7,10 @@ from debug_output import JSONLWriter, build_logger
 
 def build_training_records(samples: list[env.SpiderSample]) -> list[dict]:
     return [
-        {"sample_id": i, "prompt": env.create_prompt(sample)}
+        {"sample_id": i,
+        "prompt": [{
+            "role" : "user",
+            "content": env.create_prompt(sample)}]}
         for i, sample in enumerate(samples)
     ]
 
@@ -25,10 +28,14 @@ def reward_completions(
     sample_ids: list[int],
     sample_lookup: dict[int, env.SpiderSample],
 ) -> list[float]:
-    return [
-        env.score_sql_candidate(sample_lookup[sample_id], env.extract_sql(completion))
-        for completion, sample_id in zip(completions, sample_ids)
-    ]
+    rewards = []
+    for completion, sample_id in zip(completions, sample_ids):
+        extraction = env.extract_sql(completion)
+        reward = env.score_sql_candidate(
+            sample_lookup[sample_id], extraction["query"], extraction["has_extra_text"]
+        )
+        rewards.append(reward)
+    return rewards
 
 
 def build_spider_reward_function(
@@ -48,16 +55,23 @@ def build_spider_reward_function(
         rewards = []
 
         for completion, sid in zip(completions, sample_ids):
+            completion = completion[-1]["content"]
             sample = sample_lookup[sid]
-            query = env.extract_sql(completion)
+            extraction = env.extract_sql(completion)
+            query = extraction["query"]
+            has_extra_text = extraction["has_extra_text"]
+            was_fenced = extraction["was_fenced"]
+
             result = env.execute_query(sample.db_path, query)
-            reward = env.score_sql_candidate(sample, query)
+            reward = env.score_sql_candidate(sample, query, has_extra_text)
             rewards.append(reward)
 
             if not result.ok:
                 outcome = "execution_error"
             elif reward == 1.0:
                 outcome = "exact_match"
+            elif reward == 0.4:
+                outcome = "correct_query_extra_text"
             else:
                 outcome = "wrong_result"
 
@@ -69,6 +83,8 @@ def build_spider_reward_function(
                 "reward": reward,
                 "outcome": outcome,
                 "error": result.error,
+                "was_fenced": was_fenced,
+                "has_extra_text": has_extra_text,
             }
             if json_debugger:
                 json_debugger.write(record)
@@ -95,18 +111,18 @@ if __name__ == "__main__":
     from trl import GRPOConfig, GRPOTrainer
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct")
+    parser.add_argument("--model", default="Qwen/Qwen2.5-Coder-0.5B-Instruct")
     parser.add_argument("--split", default="train")
     parser.add_argument("--limit", default=8, type=int)
     parser.add_argument("--output-dir", default="outputs/grpo_smoke")
     parser.add_argument("--max-steps", default=1, type=int)
     parser.add_argument("--batch-size", default=2, type=int)
-    parser.add_argument("--num_generations", default=2, type=int)
+    parser.add_argument("--num-generations", default=2, type=int)
     parser.add_argument("--max-completion-length", default=128, type=int)
     parser.add_argument("--learning-rate", default=1e-6, type=float)
     parser.add_argument("--temperature", default=1.0, type=float)
-    parser.add_argument("--report_to", default="none")
-    parser.add_argument("--logging_steps", default=1, type=int)
+    parser.add_argument("--report-to", default="none")
+    parser.add_argument("--logging-steps", default=1, type=int)
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--debug", action="store_true")
 
