@@ -1,3 +1,5 @@
+"""CPU-only smoke test for terminal, file, and JSONL diagnostics."""
+
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -6,6 +8,7 @@ from debug_output import JSONLWriter, build_logger
 
 
 def main() -> None:
+    """Write representative diagnostics and verify their persisted contents."""
     with TemporaryDirectory() as output_dir:
         output_dir = Path(output_dir)
         jsonl_path = output_dir / "completions.jsonl"

@@ -1,3 +1,5 @@
+"""Spider data loading, prompt construction, SQL execution, and reward scoring."""
+
 from __future__ import annotations
 import json
 import pandas as pd
@@ -14,6 +16,8 @@ from textwrap import dedent
 # Custom Classes
 @dataclass
 class SpiderSample:
+    """A Spider question paired with its reference query and SQLite database."""
+
     question: str
     gold_query: str
     db_id: str
@@ -22,6 +26,8 @@ class SpiderSample:
 
 @dataclass
 class QueryResult:
+    """The rows or error produced by executing a SQL query."""
+
     ok: bool
     rows: list[tuple]
     error: str | None = None
@@ -31,6 +37,16 @@ class QueryResult:
 def load_spider_samples(
     spider_root: str = "Source/spider_data", split="train"
 ) -> list[SpiderSample]:
+    """Load a Spider split and resolve each example's SQLite database path.
+
+    Args:
+        spider_root: Directory containing Spider JSON files and databases.
+        split: ``"train"`` for ``train_spider.json``; any other value selects
+            ``dev.json``.
+
+    Returns:
+        Samples in their source-file order.
+    """
     spider_root = Path(spider_root)
     if split == "train":
         fname = "train_spider.json"
@@ -54,6 +70,7 @@ def load_spider_samples(
 
 
 def spider_run_query(sample: SpiderSample) -> list[tuple]:
+    """Execute a sample's reference query against its database in read-only mode."""
     db_path = sample.db_path
     query = sample.gold_query
     with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
@@ -64,6 +81,7 @@ def spider_run_query(sample: SpiderSample) -> list[tuple]:
 
 
 def spider_run_query_df(sample) -> pd.DataFrame:
+    """Execute a sample's reference query and return a labeled DataFrame."""
     db_path = sample.db_path
     query = sample.gold_query
     with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
@@ -75,6 +93,7 @@ def spider_run_query_df(sample) -> pd.DataFrame:
 
 
 def get_db_table_names(db_path: Path) -> list[str]:
+    """Return user-defined table names from a SQLite database in sorted order."""
     with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
         columns = conn.execute("""
             SELECT name 
@@ -88,6 +107,7 @@ def get_db_table_names(db_path: Path) -> list[str]:
 
 
 def get_table_schema(db_path: Path, tname: str) -> list[tuple]:
+    """Return ``(column_name, declared_type)`` pairs for a SQLite table."""
     with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
         columns = conn.execute(f"""
             SELECT name, type
@@ -98,6 +118,7 @@ def get_table_schema(db_path: Path, tname: str) -> list[tuple]:
 
 
 def create_prompt(sample) -> str:
+    """Build the schema-grounded text-to-SQL prompt for a Spider sample."""
     db_path = sample.db_path
     tables = {
         table: get_table_schema(db_path, table) for table in get_db_table_names(db_path)
@@ -141,6 +162,12 @@ def create_prompt(sample) -> str:
 
 
 def execute_query(db_path: Path, query: str) -> QueryResult:
+    """Execute SQL against a read-only SQLite database without raising SQL errors.
+
+    Returns:
+        A successful result containing fetched rows, or a failed result containing
+        the database error message.
+    """
     try:
         with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
             rows = conn.execute(query).fetchall()
@@ -150,20 +177,24 @@ def execute_query(db_path: Path, query: str) -> QueryResult:
 
 
 def does_order_matters(sql: str) -> bool:
+    """Return whether result-row order is semantically required by the SQL."""
     return "order by" in sql.lower()
 
 
 def normalize_value(value):
+    """Normalize a scalar query value before result comparison."""
     return value
 
 
 def normalize_row(row: tuple):
+    """Normalize every value in a query-result row."""
     return tuple(normalize_value(value) for value in row)
 
 
 def rows_matched(
     gold_rows: list[tuple], candidate_rows: list[tuple], order_matters: bool
 ) -> bool:
+    """Compare result rows while preserving duplicates and optional row order."""
     gold_rows = [normalize_row(row) for row in gold_rows]
     candidate_rows = [normalize_row(row) for row in candidate_rows]
 
@@ -176,6 +207,15 @@ def rows_matched(
 def score_sql_candidate(
     sample: SpiderSample, candidate_sql: str, has_extra_text: bool
 ) -> float:
+    """Score candidate SQL by execution result and output-format compliance.
+
+    The reward is ``0.0`` for invalid SQL, ``0.2`` for executable SQL with an
+    incorrect result, ``0.4`` for a correct result accompanied by extra text,
+    and ``1.0`` for a clean correct result.
+
+    Raises:
+        ValueError: If the sample's reference query cannot be executed.
+    """
     db_path = sample.db_path
     gold_result = execute_query(db_path, sample.gold_query)
     candidate_result = execute_query(db_path, candidate_sql)
@@ -201,6 +241,17 @@ def score_sql_candidate(
 
 
 def extract_sql(query: str) -> dict:
+    """Extract raw or fenced SQL and report completion-format metadata.
+
+    Exactly one ``sql`` or ``sqlite`` fenced block is recognized. Raw text with
+    no recognized fence is treated as SQL. Multiple recognized fences are
+    marked ambiguous and left unextracted so that execution scoring rejects
+    them.
+
+    Returns:
+        A dictionary containing ``query``, ``fence``, ``was_fenced``, and
+        ``has_extra_text``.
+    """
     query = query.strip()
     pat = r"```(?:sql|sqlite)[ \t]*\r?\n(?P<query>.*?)\r?\n[ \t]*```"
     m = [x for x in re.finditer(pat, query, flags=re.IGNORECASE | re.DOTALL)]
@@ -246,6 +297,10 @@ def _local_call_oai(
     model: str = "gpt-5.4-mini",
     n: int = 8,
 ):
+    """Generate local debugging completions with the OpenAI Responses API.
+
+    This helper is for local inspection only and is not used by GRPO training.
+    """
     if client is None:
         client = OpenAI()
 
@@ -264,6 +319,7 @@ def _local_call_oai(
 
 
 def create_rollout_group(sample: SpiderSample, candidate_sqls: list[str]):
+    """Score candidate completions and package them with their Spider sample."""
     group = {
         "db_id": sample.db_id,
         "question": sample.question,
@@ -287,6 +343,7 @@ def create_rollout_group(sample: SpiderSample, candidate_sqls: list[str]):
 
 
 def summarize_rollout_groups(groups: list[dict]) -> dict:
+    """Aggregate reward counts and mean reward across rollout groups."""
     rewards = [
         candidate["reward"] for group in groups for candidate in group["candidates"]
     ]

@@ -1,3 +1,5 @@
+"""Build and run the TRL GRPO training harness for the Spider environment."""
+
 from __future__ import annotations
 import logging
 import spider_env as env
@@ -6,6 +8,12 @@ from debug_output import JSONLWriter, build_logger
 
 
 def build_training_records(samples: list[env.SpiderSample]) -> list[dict]:
+    """Convert Spider samples into trainer rows with conversational prompts.
+
+    Each row contains a stable integer ``sample_id`` and one user message. The
+    reference SQL remains outside the prompt and is recovered through a
+    separate sample lookup during reward calculation.
+    """
     return [
         {"sample_id": i,
         "prompt": [{
@@ -16,10 +24,12 @@ def build_training_records(samples: list[env.SpiderSample]) -> list[dict]:
 
 
 def build_training_dataset(samples: list[env.SpiderSample]) -> Dataset:
+    """Build a Hugging Face Dataset containing trainer-ready Spider records."""
     return Dataset.from_list(build_training_records(samples))
 
 
 def _local_oai_completions(sample: env.SpiderSample, n: int) -> list[str]:
+    """Generate OpenAI completions for local reward-path debugging."""
     return env._local_call_oai(sample, n=n)
 
 
@@ -28,6 +38,7 @@ def reward_completions(
     sample_ids: list[int],
     sample_lookup: dict[int, env.SpiderSample],
 ) -> list[float]:
+    """Score plain-text completions by mapping each one to its Spider sample."""
     rewards = []
     for completion, sample_id in zip(completions, sample_ids):
         extraction = env.extract_sql(completion)
@@ -44,9 +55,21 @@ def build_spider_reward_function(
     *,
     json_debugger: JSONLWriter | None = None,
 ):
+    """Create a TRL-compatible reward callback backed by Spider execution.
+
+    Args:
+        sample_lookup: Maps dataset ``sample_id`` values to full Spider samples.
+        logger: Optional logger for one-line completion outcomes.
+        json_debugger: Optional writer for raw completions and scoring metadata.
+
+    Returns:
+        A reward function that accepts TRL conversational completions and
+        returns one float reward per completion.
+    """
     def spider_reward_function(
         prompts: list[str], completions: list[str], sample_id: list[int], **kwargs
     ) -> list[float]:
+        """Score a TRL completion batch and emit optional diagnostics."""
         sample_ids = sample_id
 
         if len(completions) != len(sample_ids):
