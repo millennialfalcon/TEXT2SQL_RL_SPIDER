@@ -111,7 +111,7 @@ if __name__ == "__main__":
     from trl import GRPOConfig, GRPOTrainer
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct")
+    parser.add_argument("--model", default="Qwen/Qwen2.5-Coder-0.5B-Instruct")
     parser.add_argument("--split", default="train")
     parser.add_argument("--limit", default=8, type=int)
     parser.add_argument("--output-dir", default="outputs/grpo_smoke")
