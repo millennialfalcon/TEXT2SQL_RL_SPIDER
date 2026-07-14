@@ -133,6 +133,7 @@ if __name__ == "__main__":
     from debug_output import JSONLWriter, build_logger
     from pathlib import Path
     from trl import GRPOConfig, GRPOTrainer
+    from peft import LoraConfig
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", default="Qwen/Qwen2.5-Coder-0.5B-Instruct")
@@ -152,8 +153,10 @@ if __name__ == "__main__":
     parser.add_argument("--save-steps", default=5, type=int)
     parser.add_argument("--save-total-limit", default=2, type=int)
     parser.add_argument("--resume-from-checkpoint")
+    parser.add_argument("--training-mode", default="full", choices=("full", "lora"))
 
     args = parser.parse_args()
+    training_mode = args.training_mode.lower()
 
     if args.batch_size % args.num_generations != 0:
         raise ValueError("batch size must be divisible by num generations")
@@ -164,7 +167,7 @@ if __name__ == "__main__":
         model_for_run_name = args.model
 
     timestamp = datetime.strftime(datetime.now(UTC), "%Y%m%d_%H%M%S")
-    run_name = f"{model_for_run_name}_{timestamp}"
+    run_name = f"{model_for_run_name}_{training_mode}_{timestamp}"
 
     samples = env.load_spider_samples(split=args.split)[: args.limit]
     dataset = build_training_dataset(samples)
@@ -173,6 +176,18 @@ if __name__ == "__main__":
     records = build_training_records(samples)
 
     run_dir = Path(args.output_dir) / run_name
+
+    if training_mode == "lora":
+        peft_config = LoraConfig(
+            r=16,
+            lora_alpha=32,
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM",
+            target_modules="all-linear",
+        )
+    else:
+        peft_config = None
 
     if args.resume_from_checkpoint:
         c_path = Path(args.resume_from_checkpoint)
@@ -216,6 +231,7 @@ if __name__ == "__main__":
         args=training_config,
         reward_funcs=reward_func,
         train_dataset=dataset,
+        peft_config=peft_config,
     )
 
     if args.train:
