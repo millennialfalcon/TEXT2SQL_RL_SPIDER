@@ -151,6 +151,7 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--save-steps", default=5, type=int)
     parser.add_argument("--save-total-limit", default=2, type=int)
+    parser.add_argument("--resume-from-checkpoint")
 
     args = parser.parse_args()
 
@@ -172,7 +173,17 @@ if __name__ == "__main__":
     records = build_training_records(samples)
 
     run_dir = Path(args.output_dir) / run_name
-    logger = build_logger(run_dir / "train.log")
+
+    if args.resume_from_checkpoint:
+        c_path = Path(args.resume_from_checkpoint)
+        if not c_path.is_dir():
+            raise ValueError("Supplied Checkpoint Path does not exist. Try again.")
+        run_dir = c_path.parent
+        run_name = run_dir.name
+        logger = build_logger(run_dir / "train.log")
+    else:
+        c_path = None
+        logger = build_logger(run_dir / "train.log")
 
     training_config = GRPOConfig(
         output_dir=run_dir,
@@ -208,6 +219,8 @@ if __name__ == "__main__":
     )
 
     if args.train:
-        trainer.train()
+        trainer.train(
+            resume_from_checkpoint=str(c_path) if c_path else None,
+        )
     else:
         print("Trainer built. Pass --train to begin. ")
