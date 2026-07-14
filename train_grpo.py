@@ -154,6 +154,7 @@ if __name__ == "__main__":
     parser.add_argument("--save-total-limit", default=2, type=int)
     parser.add_argument("--resume-from-checkpoint")
     parser.add_argument("--training-mode", default="full", choices=("full", "lora"))
+    parser.add_argument("--seed", default=13, type=int)
 
     args = parser.parse_args()
     training_mode = args.training_mode.lower()
@@ -215,6 +216,7 @@ if __name__ == "__main__":
         save_strategy="steps",
         save_steps=args.save_steps,
         save_total_limit=args.save_total_limit,
+        seed=args.seed,
     )
 
     if args.debug:
