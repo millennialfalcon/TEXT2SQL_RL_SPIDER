@@ -15,10 +15,10 @@ def build_training_records(samples: list[env.SpiderSample]) -> list[dict]:
     separate sample lookup during reward calculation.
     """
     return [
-        {"sample_id": i,
-        "prompt": [{
-            "role" : "user",
-            "content": env.create_prompt(sample)}]}
+        {
+            "sample_id": i,
+            "prompt": [{"role": "user", "content": env.create_prompt(sample)}],
+        }
         for i, sample in enumerate(samples)
     ]
 
@@ -66,6 +66,7 @@ def build_spider_reward_function(
         A reward function that accepts TRL conversational completions and
         returns one float reward per completion.
     """
+
     def spider_reward_function(
         prompts: list[str], completions: list[str], sample_id: list[int], **kwargs
     ) -> list[float]:
@@ -128,7 +129,7 @@ def build_spider_reward_function(
 
 if __name__ == "__main__":
     import argparse
-    from datetime import datetime
+    from datetime import datetime, UTC
     from debug_output import JSONLWriter, build_logger
     from pathlib import Path
     from trl import GRPOConfig, GRPOTrainer
@@ -148,6 +149,9 @@ if __name__ == "__main__":
     parser.add_argument("--logging-steps", default=1, type=int)
     parser.add_argument("--train", action="store_true")
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--save-steps", default=5, type=int)
+    parser.add_argument("--save-total-limit", default=2, type=int)
+    parser.add_argument("--resume-from-checkpoint")
 
     args = parser.parse_args()
 
@@ -159,11 +163,30 @@ if __name__ == "__main__":
     else:
         model_for_run_name = args.model
 
-    timestamp = datetime.strftime(datetime.utcnow(), "%Y%m%d_%H%M%S")
+    timestamp = datetime.strftime(datetime.now(UTC), "%Y%m%d_%H%M%S")
     run_name = f"{model_for_run_name}_{timestamp}"
 
+    samples = env.load_spider_samples(split=args.split)[: args.limit]
+    dataset = build_training_dataset(samples)
+
+    sample_lookup = {i: sample for i, sample in enumerate(samples)}
+    records = build_training_records(samples)
+
+    run_dir = Path(args.output_dir) / run_name
+
+    if args.resume_from_checkpoint:
+        c_path = Path(args.resume_from_checkpoint)
+        if not c_path.is_dir():
+            raise ValueError("Supplied Checkpoint Path does not exist. Try again.")
+        run_dir = c_path.parent
+        run_name = run_dir.name
+        logger = build_logger(run_dir / "train.log")
+    else:
+        c_path = None
+        logger = build_logger(run_dir / "train.log")
+
     training_config = GRPOConfig(
-        output_dir=args.output_dir,
+        output_dir=run_dir,
         max_steps=args.max_steps,
         per_device_train_batch_size=args.batch_size,
         num_generations=args.num_generations,
@@ -174,16 +197,10 @@ if __name__ == "__main__":
         report_to=args.report_to,
         logging_steps=args.logging_steps,
         run_name=run_name,
+        save_strategy="steps",
+        save_steps=args.save_steps,
+        save_total_limit=args.save_total_limit,
     )
-
-    samples = env.load_spider_samples(split=args.split)[: args.limit]
-    dataset = build_training_dataset(samples)
-
-    sample_lookup = {i: sample for i, sample in enumerate(samples)}
-    records = build_training_records(samples)
-
-    run_dir = Path(args.output_dir) / run_name
-    logger = build_logger(run_dir / "train.log")
 
     if args.debug:
         jsonl_writer = JSONLWriter(run_dir / "completions.jsonl")
@@ -202,6 +219,8 @@ if __name__ == "__main__":
     )
 
     if args.train:
-        trainer.train()
+        trainer.train(
+            resume_from_checkpoint=str(c_path) if c_path else None,
+        )
     else:
         print("Trainer built. Pass --train to begin. ")
