@@ -129,7 +129,7 @@ def build_spider_reward_function(
 
 if __name__ == "__main__":
     import argparse
-    from datetime import datetime
+    from datetime import datetime, UTC
     from debug_output import JSONLWriter, build_logger
     from pathlib import Path
     from trl import GRPOConfig, GRPOTrainer
@@ -163,7 +163,7 @@ if __name__ == "__main__":
     else:
         model_for_run_name = args.model
 
-    timestamp = datetime.strftime(datetime.utcnow(), "%Y%m%d_%H%M%S")
+    timestamp = datetime.strftime(datetime.now(UTC), "%Y%m%d_%H%M%S")
     run_name = f"{model_for_run_name}_{timestamp}"
 
     samples = env.load_spider_samples(split=args.split)[: args.limit]
