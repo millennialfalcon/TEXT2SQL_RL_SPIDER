@@ -56,7 +56,28 @@ def generate_completions(
         return_full_text=False,
     )
 
-    return completions
+    if len(completions) != len(samples):
+        raise ValueError("Completion length does not match sample length. ")
+
+    records = []
+    for sample_id, (sample, candidates) in enumerate(zip(samples, completions)):
+        if len(candidates) != num_generations:
+            raise ValueError("Candidate length does not match num_generations. ")
+
+        for candidate in candidates:
+            records.append(
+                {
+                    "sample_id": sample_id,
+                    "db_id": sample.db_id,
+                    "raw_completion": candidate["generated_text"],
+                }
+            )
+
+    expected_length = len(samples) * num_generations
+    if len(records) != expected_length:
+        raise ValueError("Length of records does not match the expected length. ")
+
+    return records
 
 
 if __name__ == "__main__":
@@ -66,11 +87,11 @@ if __name__ == "__main__":
     parser.add_argument("--model", required=True)
     parser.add_argument("--adapter")
     parser.add_argument("--split", default="dev")
-    parser.add_argument("--limit", default = 50, type=int)
-    parser.add_argument("--batch-size", default = 4,type=int)
-    parser.add_argument("--temperature", default = 1.0, type=float)
+    parser.add_argument("--limit", default=50, type=int)
+    parser.add_argument("--batch-size", default=4, type=int)
+    parser.add_argument("--temperature", default=1.0, type=float)
     parser.add_argument("--max-completion-length", default=128, type=int)
-    parser.add_argument("--num-generations", default = 4, type=int)
+    parser.add_argument("--num-generations", default=4, type=int)
     parser.add_argument("--seed", default=13, type=int)
 
     args = parser.parse_args()
