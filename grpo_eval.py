@@ -4,6 +4,7 @@ import numpy as np
 from debug_output import JSONLWriter
 from pathlib import Path
 from peft import PeftModel
+from tqdm.auto import tqdm
 from train_grpo import build_training_records
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed, pipeline
 
@@ -50,7 +51,7 @@ def generate_completions(
     pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
     completions = pipe(
-        prompts,
+        (prompt for prompt in prompts),
         batch_size=batch_size,
         do_sample=True,
         temperature=temperature,
@@ -58,9 +59,14 @@ def generate_completions(
         num_return_sequences=num_generations,
         return_full_text=False,
     )
-
-    if len(completions) != len(samples):
-        raise ValueError("Completion length does not match sample length. ")
+    
+    completions = tqdm(
+        pipe, 
+        total=len(samples), 
+        desc="Generating:", 
+        unit="Sample", 
+        dynamic_ncols=True
+    )
 
     records = []
     for sample_id, (sample, candidates) in enumerate(zip(samples, completions)):
@@ -97,7 +103,7 @@ def score_completions(
     first_response_accuracy = []
     format_compliance = []
 
-    for completion in completions:
+    for completion in tqdm(completions, desc="Scoring:", unit="Candidate", dynamic_ncols=True):
         sample = sample_lookup[completion["sample_id"]]
         generation_id = completion["generation_id"]
         raw_completion = completion["raw_completion"]
