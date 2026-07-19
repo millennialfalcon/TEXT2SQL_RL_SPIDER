@@ -61,7 +61,7 @@ def generate_completions(
     )
     
     completions = tqdm(
-        pipe, 
+        completions, 
         total=len(samples), 
         desc="Generating:", 
         unit="Sample", 
