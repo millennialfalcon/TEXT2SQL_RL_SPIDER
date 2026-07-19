@@ -170,6 +170,9 @@ def execute_query(db_path: Path, query: str) -> QueryResult:
     """
     try:
         with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
+            # Preserve arbitrary SQLite TEXT bytes so malformed source encoding
+            # cannot prevent otherwise valid Spider queries from being scored.
+            conn.text_factory = bytes
             rows = conn.execute(query).fetchall()
         return QueryResult(ok=True, rows=rows)
     except Exception as e:
