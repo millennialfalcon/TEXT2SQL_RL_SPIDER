@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from openai import OpenAI
 from pathlib import Path
 from textwrap import dedent
+from time import monotonic
+
+
+SQL_EXECUTION_TIMEOUT_SECONDS = 5.0
+SQL_PROGRESS_HANDLER_STEPS = 10_000
 
 
 # Custom Classes
@@ -162,17 +167,23 @@ def create_prompt(sample) -> str:
 
 
 def execute_query(db_path: Path, query: str) -> QueryResult:
-    """Execute SQL against a read-only SQLite database without raising SQL errors.
+    """Execute time-bounded SQL without raising SQLite errors.
 
     Returns:
         A successful result containing fetched rows, or a failed result containing
-        the database error message.
+        the database error message. Queries exceeding the execution deadline are
+        interrupted and returned as failures.
     """
     try:
         with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
             # Preserve arbitrary SQLite TEXT bytes so malformed source encoding
             # cannot prevent otherwise valid Spider queries from being scored.
             conn.text_factory = bytes
+            deadline = monotonic() + SQL_EXECUTION_TIMEOUT_SECONDS
+            conn.set_progress_handler(
+                lambda: monotonic() >= deadline,
+                SQL_PROGRESS_HANDLER_STEPS,
+            )
             rows = conn.execute(query).fetchall()
         return QueryResult(ok=True, rows=rows)
     except Exception as e:
