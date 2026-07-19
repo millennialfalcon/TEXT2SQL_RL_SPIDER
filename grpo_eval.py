@@ -187,7 +187,6 @@ if __name__ == "__main__":
     parser.add_argument("--num-generations", default=4, type=int)
     parser.add_argument("--seed", default=13, type=int)
     parser.add_argument("--output", default="outputs/grpo_evals")
-    parser.add_argument("--training-mode", default="full", choices=("full", "lora"))
 
     args = parser.parse_args()
 
