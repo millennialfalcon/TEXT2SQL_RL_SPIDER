@@ -50,39 +50,46 @@ def generate_completions(
 
     pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
-    completions = pipe(
-        (prompt for prompt in prompts),
-        batch_size=batch_size,
-        do_sample=True,
-        temperature=temperature,
-        max_new_tokens=max_completion_length,
-        num_return_sequences=num_generations,
-        return_full_text=False,
-    )
-    
-    completions = tqdm(
-        completions, 
-        total=len(samples), 
-        desc="Generating:", 
-        unit="Sample", 
-        dynamic_ncols=True
-    )
-
     records = []
-    for sample_id, (sample, candidates) in enumerate(zip(samples, completions)):
-        if len(candidates) != num_generations:
-            raise ValueError("Candidate length does not match num_generations. ")
-        generation_id = 0
-        for candidate in candidates:
-            records.append(
-                {
-                    "sample_id": sample_id,
-                    "generation_id": generation_id,
-                    "db_id": sample.db_id,
-                    "raw_completion": candidate["generated_text"],
-                }
+    with tqdm(
+        total=len(samples),
+        desc="Generating:",
+        unit="Sample",
+        dynamic_ncols=True,
+    ) as progress:
+        for batch_start in range(0, len(prompts), batch_size):
+            batch_end = min(batch_start + batch_size, len(prompts))
+            prompt_batch = prompts[batch_start:batch_end]
+            completion_batch = pipe(
+                prompt_batch,
+                batch_size=len(prompt_batch),
+                do_sample=True,
+                temperature=temperature,
+                max_new_tokens=max_completion_length,
+                num_return_sequences=num_generations,
+                return_full_text=False,
             )
-            generation_id += 1
+
+            sample_batch = samples[batch_start:batch_end]
+            if len(completion_batch) != len(sample_batch):
+                raise ValueError("Completion batch length does not match sample batch. ")
+
+            for sample_id, sample, candidates in zip(
+                range(batch_start, batch_end), sample_batch, completion_batch
+            ):
+                if len(candidates) != num_generations:
+                    raise ValueError("Candidate length does not match num_generations. ")
+                for generation_id, candidate in enumerate(candidates):
+                    records.append(
+                        {
+                            "sample_id": sample_id,
+                            "generation_id": generation_id,
+                            "db_id": sample.db_id,
+                            "raw_completion": candidate["generated_text"],
+                        }
+                    )
+
+            progress.update(len(sample_batch))
 
     expected_length = len(samples) * num_generations
     if len(records) != expected_length:
