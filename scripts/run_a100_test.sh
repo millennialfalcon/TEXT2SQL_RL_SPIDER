@@ -63,17 +63,30 @@ evaluate_full() {
     --output outputs/grpo_evals
 }
 
+# Completed 0.5B sweep:
+# run_experiment \
+#     "Qwen/Qwen2.5-Coder-0.5B-Instruct" \
+#     "full" \
+#     "1e-6"
+
+# run_experiment \
+#     "Qwen/Qwen2.5-Coder-0.5B-Instruct" \
+#     "lora" \
+#     "1e-6"
+
+# run_experiment \
+#     "Qwen/Qwen2.5-Coder-0.5B-Instruct" \
+#     "lora" \
+#     "1e-5"
+
+BEST_LORA_LR="1e-5"
+
 run_experiment \
-    "Qwen/Qwen2.5-Coder-0.5B-Instruct" \
+    "Qwen/Qwen2.5-Coder-1.5B-Instruct" \
     "full" \
     "1e-6"
 
 run_experiment \
-    "Qwen/Qwen2.5-Coder-0.5B-Instruct" \
+    "Qwen/Qwen2.5-Coder-1.5B-Instruct" \
     "lora" \
-    "1e-6"
-
-run_experiment \
-    "Qwen/Qwen2.5-Coder-0.5B-Instruct" \
-    "lora" \
-    "1e-5"
+    "$BEST_LORA_LR"

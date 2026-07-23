@@ -59,6 +59,8 @@ logs/
 *.log
 wandb/
 FFT_VS_LoRA/
+text2sql-a100-*/
+tests/
 
 # ============================================================
 # OS / editor cruft
@@ -76,3 +78,5 @@ wip.ipynb
 hidden.py
 hidden.txt
 wandb.txt
+PARKING_LOT.md
+Results/EXPERIMENT_RESULTS.md
